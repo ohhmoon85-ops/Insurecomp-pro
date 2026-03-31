@@ -1,0 +1,230 @@
+// InsureComp Pro - 보험 GA 통합 비교·설명 플랫폼
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(cuid())
+  name        String
+  email       String   @unique
+  password    String
+  role        String   @default("AGENT") // GA_ADMIN | AGENT
+  licenseNo   String?
+  phone       String?
+  profileImg  String?
+  gaId        String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  ga            GA?                   @relation(fields: [gaId], references: [id])
+  proposals     Proposal[]
+  consultations ConsultationRequest[]
+  agreements    AgentAgreement[]
+  activityLogs  ActivityLog[]
+  commissions   Commission[]
+  assignedClients Client[]            @relation("AssignedAgent")
+
+  @@map("users")
+}
+
+model GA {
+  id         String  @id @default(cuid())
+  name       String
+  logoUrl    String?
+  brandColor String  @default("#2563EB")
+  phone      String?
+  address    String?
+  createdAt  DateTime @default(now())
+
+  agents  User[]
+  clients Client[]
+
+  @@map("gas")
+}
+
+model InsuranceCompany {
+  id          String   @id @default(cuid())
+  name        String
+  logoUrl     String?
+  ratingGrade String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  products Product[]
+
+  @@map("insurance_companies")
+}
+
+model Product {
+  id             String  @id @default(cuid())
+  companyId      String
+  productName    String
+  category       String  // LIFE | CI | HEALTH | ACCIDENT | SAVINGS
+  premiumBase    Float
+  renewalType    String  // NON_RENEWABLE | RENEWABLE | MIXED
+  paymentPeriod  Int
+  coveragePeriod Int     // 999 = 종신
+  minAge         Int     @default(0)
+  maxAge         Int     @default(75)
+  description    String?
+  isActive       Boolean @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  company       InsuranceCompany      @relation(fields: [companyId], references: [id])
+  coverages     Coverage[]
+  proposalItems ProposalItem[]
+  consultations ConsultationRequest[]
+
+  @@map("products")
+}
+
+model Coverage {
+  id           String  @id @default(cuid())
+  productId    String
+  coverageName String
+  amount       Float
+  unit         String  @default("원")
+  isOptional   Boolean @default(false)
+  riderPremium Float?
+  category     String?
+  sortOrder    Int     @default(0)
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("coverages")
+}
+
+model Client {
+  id              String   @id @default(cuid())
+  ownedByGaId     String
+  assignedAgentId String?
+  nameEncrypted   String
+  phoneEncrypted  String?
+  age             Int?
+  gender          String?
+  occupation      String?
+  healthCondition String?
+  incomeLevel     String?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  ga            GA    @relation(fields: [ownedByGaId], references: [id])
+  assignedAgent User? @relation("AssignedAgent", fields: [assignedAgentId], references: [id])
+  proposals     Proposal[]
+
+  @@map("clients")
+}
+
+model Proposal {
+  id           String   @id @default(cuid())
+  agentId      String
+  clientId     String?
+  clientName   String
+  clientAge    Int?
+  clientGender String?
+  title        String?
+  shareToken   String   @unique @default(cuid())
+  status       String   @default("DRAFT") // DRAFT | SHARED | VIEWED | PENDING | COMPLETED
+  expiresAt    DateTime?
+  viewCount    Int      @default(0)
+  aiAnalysis   String?
+  watermark    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  agent         User                  @relation(fields: [agentId], references: [id])
+  client        Client?               @relation(fields: [clientId], references: [id])
+  items         ProposalItem[]
+  consultations ConsultationRequest[]
+  commissions   Commission[]
+
+  @@map("proposals")
+}
+
+model ProposalItem {
+  id         String  @id @default(cuid())
+  proposalId String
+  productId  String
+  sortOrder  Int     @default(0)
+  premium    Float?
+  aiScore    Float?
+  aiRank     Int?
+  aiReason   String?
+
+  proposal Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id])
+
+  @@map("proposal_items")
+}
+
+model ConsultationRequest {
+  id            String   @id @default(cuid())
+  proposalId    String?
+  productId     String
+  agentId       String
+  clientName    String
+  clientPhone   String
+  preferredTime String   // morning | afternoon | evening
+  status        String   @default("PENDING") // PENDING | CONTACTED | COMPLETED | CANCELLED
+  notes         String?
+  requestedAt   DateTime @default(now())
+  contactedAt   DateTime?
+  completedAt   DateTime?
+  cancelledAt   DateTime?
+
+  proposal Proposal? @relation(fields: [proposalId], references: [id])
+  product  Product   @relation(fields: [productId], references: [id])
+  agent    User      @relation(fields: [agentId], references: [id])
+
+  @@map("consultation_requests")
+}
+
+model Commission {
+  id         String   @id @default(cuid())
+  proposalId String
+  agentId    String
+  amount     Float
+  status     String   @default("PENDING")
+  paidAt     DateTime?
+  createdAt  DateTime @default(now())
+
+  proposal Proposal @relation(fields: [proposalId], references: [id])
+  agent    User     @relation(fields: [agentId], references: [id])
+
+  @@map("commissions")
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  agentId   String?
+  action    String
+  targetId  String?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  agent User? @relation(fields: [agentId], references: [id])
+
+  @@map("activity_logs")
+}
+
+model AgentAgreement {
+  id        String   @id @default(cuid())
+  agentId   String
+  version   String
+  signedAt  DateTime @default(now())
+  ipAddress String?
+
+  agent User @relation(fields: [agentId], references: [id])
+
+  @@map("agent_agreements")
+}
